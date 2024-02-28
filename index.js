@@ -1,113 +1,63 @@
+require('dotenv').config();
+const APPLICATION_ID = process.env.APPLICATION_ID;
+const TOKEN = process.env.TOKEN;
+const PUBLIC_KEY = process.env.PUBLIC_KEY || 'not set';
+const GUILD_ID = process.env.GUILD_ID;
+const POINTS_CHANNEL_ID = process.env.POINTS_CHANNEL_ID; // ポイントを管理しているチャンネルのID
 
-// const { clientId, guildId, token, publicKey } = require('./config.json');
-require('dotenv').config()
-const APPLICATION_ID = process.env.APPLICATION_ID 
-const TOKEN = process.env.TOKEN 
-const PUBLIC_KEY = process.env.PUBLIC_KEY || 'not set'
-const GUILD_ID = process.env.GUILD_ID 
-
-
-const axios = require('axios')
+const axios = require('axios');
 const express = require('express');
-const { InteractionType, InteractionResponseType, verifyKeyMiddleware } = require('discord-interactions');
+const { InteractionType, InteractionResponseType, verifyKeyMiddleware, InteractionResponseFlags } = require('discord-interactions');
 
-
-const app = express();
-// app.use(bodyParser.json());
+const app = express().use(express.json());
 
 const discord_api = axios.create({
   baseURL: 'https://discord.com/api/',
-  timeout: 3000,
   headers: {
-	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
-	"Access-Control-Allow-Headers": "Authorization",
-	"Authorization": `Bot ${TOKEN}`
+    "Authorization": `Bot ${TOKEN}`
   }
 });
-
-
-
 
 app.post('/interactions', verifyKeyMiddleware(PUBLIC_KEY), async (req, res) => {
   const interaction = req.body;
 
-  if (interaction.type === InteractionType.APPLICATION_COMMAND) {
-    console.log(interaction.data.name)
-    if(interaction.data.name == 'yo'){
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          content: `Yo ${interaction.member.user.username}!`,
-        },
-      });
-    }
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data.name === 'myPoints') {
+    // ポイント管理チャンネルから最新のメッセージを取得
+    try {
+      const messagesResponse = await discord_api.get(`/channels/${POINTS_CHANNEL_ID}/messages?limit=1`);
+      const latestMessage = messagesResponse.data[0];
+      const userId = interaction.member.user.id;
+      const username = interaction.member.user.username;
+      const pointPattern = new RegExp(`<@!?${userId}> has (\\d+) points`); // メンバーIDを使ってポイントを検索
+      const match = latestMessage.content.match(pointPattern);
 
-    if(interaction.data.name == 'dm'){
-      // https://discord.com/developers/docs/resources/user#create-dm
-      let c = (await discord_api.post(`/users/@me/channels`,{
-        recipient_id: interaction.member.user.id
-      })).data
-      try{
-        // https://discord.com/developers/docs/resources/channel#create-message
-        let res = await discord_api.post(`/channels/${c.id}/messages`,{
-          content:'Yo! I got your slash command. I am not able to respond to DMs just slash commands.',
-        })
-        console.log(res.data)
-      }catch(e){
-        console.log(e)
+      if (match && match[1]) {
+        // メンバーに直接メッセージを送信
+        await discord_api.post(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `<@${userId}> さんは${match[1]}ポイント保有しています。`,
+            flags: InteractionResponseFlags.EPHEMERAL // メッセージをコマンドを使用したユーザーにのみ表示
+          }
+        });
+      } else {
+        // ポイントが見つからなかった場合の処理
+        await discord_api.post(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `ポイント情報が見つかりませんでした。`,
+            flags: InteractionResponseFlags.EPHEMERAL
+          }
+        });
       }
-
-      return res.send({
-        // https://discord.com/developers/docs/interactions/receiving-and-responding#responding-to-an-interaction
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data:{
-          content:'👍'
-        }
-      });
+    } catch (error) {
+      console.error('Error fetching messages or responding to command:', error);
     }
   }
-
 });
 
-
-
-app.get('/register_commands', async (req,res) =>{
-  let slash_commands = [
-    {
-      "name": "yo",
-      "description": "replies with Yo!",
-      "options": []
-    },
-    {
-      "name": "dm",
-      "description": "sends user a DM",
-      "options": []
-    }
-  ]
-  try
-  {
-    // api docs - https://discord.com/developers/docs/interactions/application-commands#create-global-application-command
-    let discord_response = await discord_api.put(
-      `/applications/${APPLICATION_ID}/guilds/${GUILD_ID}/commands`,
-      slash_commands
-    )
-    console.log(discord_response.data)
-    return res.send('commands have been registered')
-  }catch(e){
-    console.error(e.code)
-    console.error(e.response?.data)
-    return res.send(`${e.code} error from discord`)
-  }
-})
-
-
-app.get('/', async (req,res) =>{
-  return res.send('Follow documentation ')
-})
-
+// スラッシュコマンドの登録とその他のルーティングは省略
 
 app.listen(8999, () => {
-
-})
-
+  console.log('Server is running on port 8999');
+});
