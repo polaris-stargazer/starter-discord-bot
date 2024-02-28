@@ -57,7 +57,7 @@ app.post('/interactions', verifyKeyMiddleware(PUBLIC_KEY), async (req, res) => {
 });
 
     // 以下を追記: ギルド固有のスラッシュコマンドを登録するコード
-    const guildId = 'YOUR_GUILD_ID'; // 対象のギルドIDを設定
+    const guildId = '1211874680240349195'; // 対象のギルドIDを設定
     const guild = client.guilds.cache.get(guildId);
 
     if (!guild) {
