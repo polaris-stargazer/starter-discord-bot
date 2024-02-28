@@ -56,7 +56,28 @@ app.post('/interactions', verifyKeyMiddleware(PUBLIC_KEY), async (req, res) => {
   }
 });
 
-// スラッシュコマンドの登録とその他のルーティングは省略
+    // 以下を追記: ギルド固有のスラッシュコマンドを登録するコード
+    const guildId = 'YOUR_GUILD_ID'; // 対象のギルドIDを設定
+    const guild = client.guilds.cache.get(guildId);
+
+    if (!guild) {
+        console.warn(`ギルドが見つかりません: ${guildId}`);
+        return;
+    }
+
+    try {
+        // '/myPoints' コマンドを登録
+        await guild.commands.create({
+            name: 'myPoints',
+            description: 'Shows your current points.'
+        });
+
+        console.log(`'myPoints' コマンドを ${guild.name} に登録しました。`);
+    } catch (error) {
+        console.error(`コマンドの登録に失敗しました: ${error}`);
+    }
+});
+
 
 app.listen(8999, () => {
   console.log('Server is running on port 8999');
